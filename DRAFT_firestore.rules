@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Validation Helpers ---
+    
+    function isValidProject(data) {
+      return data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.client is string && data.client.size() > 0 && data.client.size() <= 200 &&
+             data.status in ["Pending", "In Progress", "Completed"] &&
+             data.progress is number && data.progress >= 0 && data.progress <= 100;
+    }
+
+    function isValidTransaction(data) {
+      return data.userId == request.auth.uid &&
+             data.amount is number &&
+             data.type in ["income", "expense"] &&
+             data.category is string && data.category.size() <= 100 &&
+             data.date is string;
+    }
+
+    function isValidGoal(data) {
+      return data.userId == request.auth.uid &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
+             data.target is number && data.target >= 0 &&
+             data.current is number && data.current >= 0;
+    }
+
+    function isValidNote(data) {
+      return data.userId == request.auth.uid &&
+             data.content is string && data.content.size() > 0 && data.content.size() <= 10000 &&
+             data.date is string;
+    }
+
+    function isValidWorkout(data) {
+      return data.userId == request.auth.uid &&
+             data.exercise is string && data.exercise.size() > 0 && data.exercise.size() <= 200 &&
+             data.sets is number && data.sets >= 0 &&
+             data.reps is number && data.reps >= 0 &&
+             data.weight is number && data.weight >= 0 &&
+             data.date is string;
+    }
+
+    function isValidClient(data) {
+      return data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             (data.email == null || (data.email is string && data.email.size() <= 200));
+    }
+
+    function isValidInvoice(data) {
+      return data.userId == request.auth.uid &&
+             data.invoiceNumber is string && data.invoiceNumber.size() > 0 && data.invoiceNumber.size() <= 50 &&
+             data.amount is number && data.amount >= 0 &&
+             data.status in ["Draft", "Sent", "Paid", "Overdue"];
+    }
+
+    // --- Collection Rules ---
+
+    match /projects/{projectId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidProject(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidProject(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidTransaction(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidTransaction(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /goals/{goalId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidGoal(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidGoal(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /notes/{noteId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidNote(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidNote(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /workouts/{workoutId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidWorkout(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidWorkout(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /clients/{clientId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidClient(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidClient(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isVerified() && isValidInvoice(incoming());
+      allow update: if isVerified() && isOwner(existing().userId) && isValidInvoice(incoming()) && (
+        incoming().userId == existing().userId
+      );
+      allow delete: if isOwner(existing().userId);
+    }
+  }
+}
